@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DrinkText | Editor matemático</title>
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+  <div class="aplicacion">
+    <header class="barra-superior">
+      <div class="marca"><div class="marca-icono">D</div><div><strong>DrinkText</strong><span>Editor de documentos matemáticos</span></div></div>
+      <div class="barra-acciones">
+        <button class="boton secundario" onclick="document.getElementById('archivo').click()">Abrir TXT</button>
+        <button class="boton secundario" onclick="guardar()">Guardar TXT</button>
+        <button class="boton primario" onclick="imprimir()">Imprimir / PDF</button>
+        <input id="archivo" type="file" accept=".txt,text/plain" hidden onchange="abrirArchivo(event)">
+      </div>
+    </header>
+    <div class="subbarra"><span>Espacio de trabajo</span><span class="subbarra-ayuda">Escribe instrucciones a la izquierda y visualiza el resultado a la derecha.</span></div>
+    <main>
+      <section class="panel editor-panel" aria-label="Editor de texto">
+        <div class="panel-cabecera"><div><h2>Editor</h2><p>Lenguaje DrinkText · español y comandos</p></div><span class="etiqueta">Texto fuente</span></div>
+        <textarea id="codigo" aria-label="Código DrinkText" spellcheck="false">TITULO: Mi primer documento DrinkText
+AUTOR: Estudiante
+SECCION: Lenguaje natural
+TEXTO: DrinkText representa formulas sin resolverlas.
+FORMULA: fraccion 1 sobre 2 mas fraccion 3 sobre 4
+FORMULA: x elevado a 2 mas raiz de (9 mas 7)
+FORMULA: integral desde 0 hasta 5 de x elevado a 2 respecto a x
+SECCION: Comandos propios
+FORMULA: frac(x+1;x-2)
+FORMULA: pot(x;3) + raiz(x+5)
+FORMULA: frac(1;raiz(4))
+FORMULA: integral(0;1;pot(x;2);x)</textarea>
+        <div class="pie-editor"><span id="contador">0 líneas</span><span id="almacenado">Guardado automático local</span></div>
+        <details class="guia"><summary>Guía rápida de comandos</summary>
+          <p>Fracción: <code>frac(1;2)</code> · Potencia: <code>pot(x;2)</code> · Raíz: <code>raiz(9)</code></p>
+          <p>Integral: <code>integral(0;1;x;x)</code> · También: <code>fracción 1 sobre 2</code></p>
+          <p>Las fórmulas no se calculan. Para fórmulas complejas, usa los comandos.</p>
+        </details>
+      </section>
+      <section class="panel vista-panel" aria-label="Vista previa">
+        <div class="panel-cabecera"><div><h2>Vista previa</h2><p>Documento listo para imprimir</p></div><span id="estado" class="etiqueta etiqueta-verde">Sin errores</span></div>
+        <div class="area-hoja"><article id="vista" class="hoja"></article></div><div id="errores" class="panel-errores" role="status" aria-live="polite">Sin errores de sintaxis.</div>
+      </section>
+    </main>
+    <footer class="pie-aplicacion"><span>DrinkText · DrinkTeam</span><span>Formato simple para documentos matemáticos</span></footer>
+  </div>
+  <script src="logica.js"></script>
+  <script>
+    const editor = document.getElementById('codigo');
+    const clave = 'drinktext-borrador';
+    let modificado = false;
+
+    // Recupera el último texto escrito (si el navegador permite guardar).
+    try {
+      const borrador = localStorage.getItem(clave);
+      if (borrador !== null) { editor.value = borrador; modificado = true; }
+    } catch (e) {
+      document.getElementById('almacenado').textContent = 'Usa Guardar TXT para conservar tus cambios';
+    }
+
+    function actualizar() {
+      const resultado = analizarDocumento(editor.value);
+      document.getElementById('vista').innerHTML = resultado.html ||
+        (resultado.errores.length ? '' : '<p class="vacio">Escribe un documento para ver el resultado.</p>');
+      const estado = document.getElementById('estado');
+      const errores = document.getElementById('errores');
+      estado.textContent = resultado.errores.length ? resultado.errores.length + ' error(es)' : 'Sin errores';
+      estado.classList.toggle('etiqueta-error', resultado.errores.length > 0);
+      errores.textContent = resultado.errores.length
+        ? resultado.errores.map(e => 'Línea ' + e.linea + ': ' + e.mensaje).join('\n')
+        : 'Sin errores de sintaxis.';
+      errores.classList.toggle('con-errores', resultado.errores.length > 0);
+      const lineas = editor.value ? editor.value.split('\n').length : 0;
+      document.getElementById('contador').textContent = lineas + (lineas === 1 ? ' línea' : ' líneas');
+    }
+
+    function guardarBorrador() {
+      try {
+        localStorage.setItem(clave, editor.value);
+        document.getElementById('almacenado').textContent = 'Borrador guardado en este navegador';
+      } catch (e) {
+        document.getElementById('almacenado').textContent = 'No se pudo guardar: usa Guardar TXT';
+      }
+    }
+
+    editor.addEventListener('input', () => {
+      modificado = true;
+      actualizar();
+      guardarBorrador();
+    });
+
+    function imprimir() {
+      if (!editor.value.trim()) { alert('El documento está vacío.'); return; }
+      if (analizarDocumento(editor.value).errores.length) {
+        alert('Corrige los errores indicados antes de imprimir.');
+        return;
+      }
+      window.print();
+    }
+
+    function guardar() {
+      const archivo = new Blob([editor.value], { type: 'text/plain;charset=utf-8' });
+      const enlace = document.createElement('a');
+      const url = URL.createObjectURL(archivo);
+      enlace.href = url;
+      enlace.download = 'documento-drinktext.txt';
+      enlace.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      modificado = false;
+    }
+
+    function abrirArchivo(evento) {
+      const archivo = evento.target.files[0];
+      evento.target.value = '';
+      if (!archivo) return;
+      if (archivo.size > 60000) {
+        alert('El archivo supera el tamaño permitido. Usa un TXT más pequeño.');
+        return;
+      }
+      if (modificado && !confirm('¿Reemplazar el documento actual? Guarda primero tu TXT si deseas conservarlo.')) return;
+      const lector = new FileReader();
+      lector.onload = () => {
+        if (lector.result.length > MAX_DOCUMENTO) {
+          alert('El documento supera el límite de ' + MAX_DOCUMENTO + ' caracteres.');
+          return;
+        }
+        editor.value = lector.result;
+        modificado = true;
+        actualizar();
+        guardarBorrador();
+      };
+      lector.onerror = () => alert('No se pudo leer el archivo. Inténtalo nuevamente.');
+      lector.readAsText(archivo, 'UTF-8');
+    }
+    actualizar();
+  </script>
+</body>
+</html>
